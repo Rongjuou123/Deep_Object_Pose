@@ -9,6 +9,8 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.utils.data
 import torchvision.models as models
+import timm
+import torch.nn.functional as F
 
 
 class DopeNetwork(nn.Module):
@@ -23,6 +25,7 @@ class DopeNetwork(nn.Module):
 
         self.stop_at_stage = stop_at_stage
 
+        """
         vgg_full = models.vgg19(pretrained=False).features
         self.vgg = nn.Sequential()
         for i_layer in range(24):
@@ -38,6 +41,29 @@ class DopeNetwork(nn.Module):
             str(i_layer + 2), nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
         )
         self.vgg.add_module(str(i_layer + 3), nn.ReLU(inplace=True))
+        """
+
+        # === 1. ViT backbone using timm ===
+        self.vit = timm.create_model(
+            'vit_base_patch16_224', pretrained=True, features_only=True
+        )
+        #self.vit = timm.create_model(
+        #    'swin_base_patch4_window7_224',
+        #    pretrained=True,
+        #    features_only=True
+        #)
+
+        # Vit输出的最后一层特征大小（默认是 [B, 768, 14, 14]）
+        vit_out_channels = self.vit.feature_info[-1]['num_chs']  # usually 768
+
+        # === 2. 将Vit输出映射到128通道 ===
+        self.feature_proj = nn.Sequential(
+            nn.Conv2d(vit_out_channels, 256, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 128, kernel_size=1),
+            nn.ReLU(inplace=True),
+        )
+        #---above is transformer
 
         # print('---Belief------------------------------------------------')
         # _2 are the belief map stages
@@ -80,7 +106,14 @@ class DopeNetwork(nn.Module):
     def forward(self, x):
         """Runs inference on the neural network"""
 
-        out1 = self.vgg(x)
+        #out1 = self.vgg(x)
+        #--------------------
+        x = F.interpolate(x, size=(224, 224), mode='bilinear')
+        feats = self.vit(x)
+        out1 = self.feature_proj(feats[-1])  # 使用最后一层特征
+        #out1 = self.feature_proj(out1)  # Conv 映射到 128 channels
+        out1 = F.interpolate(out1, size=(50, 50), mode='bilinear', align_corners=False)
+        #----------------
 
         out1_2 = self.m1_2(out1)
         out1_1 = self.m1_1(out1)
