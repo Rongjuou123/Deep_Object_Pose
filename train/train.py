@@ -26,6 +26,9 @@ from tensorboardX import SummaryWriter
 
 import sys
 sys.path.insert(1, '../common')
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# common_dir = os.path.abspath(os.path.join(current_dir, "..", "common"))
+# sys.path.insert(0, common_dir)
 from models import *
 from utils import *
 
@@ -208,6 +211,11 @@ net = DopeNetwork()
 output_size = 50
 opt.sigma = 0.5
 
+# if hasattr(net, 'vit'):
+#     print("Loading ViT pretrained weights...")
+#     vit = timm.create_model('vit_base_patch16_224', pretrained=True)
+#     # net.vit.load_state_dict(vit.state_dict(), strict=True)
+
 
 train_dataset = CleanVisiiDopeLoader(
     opt.data,
@@ -238,7 +246,24 @@ net = torch.nn.parallel.DistributedDataParallel(
 
 if opt.pretrained:
     if opt.net_path is not None:
+        print(f"Loading pretrained weights from {opt.net_path}")
         net.load_state_dict(torch.load(opt.net_path))
+        # checkpoint = torch.load(opt.net_path, map_location='cpu')
+        
+        # state_dict = checkpoint
+
+        # from collections import OrderedDict
+        # new_state_dict = OrderedDict()
+        # for k, v in state_dict.items():
+        #     if k.startswith('module.'):
+        #         new_state_dict[k] = v
+        #     else:
+        #         new_state_dict['module.' + k] = v  # DDP expects 'module.' prefix
+
+        # # ③ 加载（允许跳过不匹配的层）
+        # missing, unexpected = net.load_state_dict(new_state_dict, strict=False)
+        # print(f"Missing keys: {missing}")
+        # print(f"Unexpected keys: {unexpected}")
     else:
         print("Error: Did not specify path to pretrained weights.")
         quit()
@@ -394,15 +419,16 @@ for epoch in range(start_epoch, opt.epochs + 1):
     if not opt.nbupdates is None and nb_update_network > int(opt.nbupdates):
         break
 
-if local_rank == 0:
-    torch.save(
-        net.state_dict(), f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}.pth"
-    )
-else:
-    torch.save(
-        net.state_dict(),
-        f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}_rank_{local_rank}.pth",
-    )
+if epoch % 10 == 0:
+    if local_rank == 0:
+        torch.save(
+            net.state_dict(), f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}.pth"
+        )
+    else:
+        torch.save(
+            net.state_dict(),
+            f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}_rank_{local_rank}.pth",
+        )
 
 print("end:", datetime.datetime.now().strftime("%m/%d/%Y, %H:%M:%S"))
 print(
