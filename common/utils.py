@@ -91,7 +91,12 @@ def loadimages(root, extensions=["png"]):
                     continue
                 #print("imgpath: ", imgpath)
 
-                base_name = file.replace("_rgb", "").split(".")[0] 
+                # base_name = file.replace("_rgb", "").split(".")[0] 
+                if "_rgb" in file:
+                    base_name = file.replace("_rgb", "").split(".")[0]
+                else:
+                    base_name = file.split(".")[0]
+
                 json_filename = base_name + ".json"
                 json_path = os.path.join(root, json_filename) 
                 #print(base_name)
