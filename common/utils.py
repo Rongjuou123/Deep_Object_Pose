@@ -85,6 +85,27 @@ def loadimages(root, extensions=["png"]):
         for ext in extensions:
             for file in os.listdir(path):
                 imgpath = os.path.join(path, file)
+                #print("imgpath: ", imgpath)
+                #--------
+                if not file.endswith(ext):
+                    continue
+                #print("imgpath: ", imgpath)
+
+                base_name = file.replace("_rgb", "").split(".")[0] 
+                json_filename = base_name + ".json"
+                json_path = os.path.join(root, json_filename) 
+                #print(base_name)
+                #print(json_path)
+                if imgpath.endswith(ext) and exists(imgpath) and exists(json_path):
+                    imgs.append(
+                        (
+                        imgpath,               # 图像路径
+                        file,                  # 图像名（如 0000_rgb.jpg）
+                        json_path              # 对应的 json 路径
+                        )
+                    )
+                #----------
+                """
                 if (
                     imgpath.endswith(ext)
                     and exists(imgpath)
@@ -97,6 +118,7 @@ def loadimages(root, extensions=["png"]):
                             imgpath.replace(ext, ".json"),
                         )
                     )
+                """
 
     def explore(path):
         if not os.path.isdir(path):
@@ -171,7 +193,7 @@ class CleanVisiiDopeLoader(data.Dataset):
         objects=None,
         sigma=1,
         output_size=400,
-        extensions=["png"],
+        extensions=["jpg"],
         debug=False,
         use_s3=False,
         buckets=[],

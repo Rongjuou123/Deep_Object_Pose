@@ -52,26 +52,48 @@ class DopeNetwork(nn.Module):
         numBeliefMap=9,
         numAffinity=16,
         stop_at_stage=6,  # number of stages to process (if less than total number of stages)
+        feature_extractor = "vit"
     ):
         super(DopeNetwork, self).__init__()
 
         self.stop_at_stage = stop_at_stage
 
-        vgg_full = models.vgg19(pretrained=False).features
-        self.vgg = nn.Sequential()
-        for i_layer in range(24):
-            self.vgg.add_module(str(i_layer), vgg_full[i_layer])
+        #-----------
+        self.feature_extractor = feature_extractor
 
-        # Add some layers
-        i_layer = 23
-        self.vgg.add_module(
-            str(i_layer), nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
-        )
-        self.vgg.add_module(str(i_layer + 1), nn.ReLU(inplace=True))
-        self.vgg.add_module(
-            str(i_layer + 2), nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
-        )
-        self.vgg.add_module(str(i_layer + 3), nn.ReLU(inplace=True))
+        if(feature_extractor == "vgg"):
+            vgg_full = models.vgg19(pretrained=False).features
+            self.vgg = nn.Sequential()
+            for i_layer in range(24):
+                self.vgg.add_module(str(i_layer), vgg_full[i_layer])
+
+            # Add some layers
+            i_layer = 23
+            self.vgg.add_module(
+                str(i_layer), nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
+            )
+            self.vgg.add_module(str(i_layer + 1), nn.ReLU(inplace=True))
+            self.vgg.add_module(
+                str(i_layer + 2), nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
+            )
+            self.vgg.add_module(str(i_layer + 3), nn.ReLU(inplace=True))
+        
+        elif(feature_extractor == "vit"):
+             # === ViT 作为特征提取器 ===
+            self.vit = timm.create_model(
+                'vit_base_patch16_224',
+                pretrained=True,
+                features_only=True
+            )
+            vit_out_channels = self.vit.feature_info[-1]['num_chs']  # 通常为 768
+            self.feature_proj = nn.Sequential(
+                nn.Conv2d(vit_out_channels, 256, kernel_size=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(256, 128, kernel_size=1),
+                nn.ReLU(inplace=True),
+            )
+        else:
+            raise ValueError("Unknown feature_extractor: " + feature_extractor)
 
         # print('---Belief------------------------------------------------')
         # _2 are the belief map stages
@@ -114,7 +136,19 @@ class DopeNetwork(nn.Module):
     def forward(self, x):
         """Runs inference on the neural network"""
 
-        out1 = self.vgg(x)
+        #out1 = self.vgg(x)
+        #----------------------------------------------------
+        x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
+
+        # === 1. 用 ViT 提取多层特征 ===
+        vit_features = self.vit(x)
+
+        # 只取最后一层 ViT 输出（通常是 [B, 768, 14, 14]）
+        feat = vit_features[-1]
+
+        # === 2. 投影到 128 通道 ===
+        out1 = self.feature_proj(feat)  # [B, 128, 14, 14]
+        #-------------------------------------------------------
 
         out1_2 = self.m1_2(out1)
         out1_1 = self.m1_1(out1)
@@ -266,7 +300,16 @@ class ModelData(object):
         else:
             net = net.cuda()
 
-        net.load_state_dict(torch.load(path))
+        #------------
+        state_dict = torch.load(path)
+        if any(k.startswith("module.") for k in state_dict.keys()):
+            state_dict = {k.replace("module.", "", 1): v for k, v in state_dict.items()}
+        net.load_state_dict(state_dict)
+
+
+        #----------
+
+        #net.load_state_dict(torch.load(path))
         net.eval()
         print(
             "    Model loaded in {:.2f} seconds.".format(
