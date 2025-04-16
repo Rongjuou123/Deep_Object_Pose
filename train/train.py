@@ -10,7 +10,7 @@ import os
 import random
 import warnings
 warnings.filterwarnings("ignore")
-
+import time
 try:
     import configparser as configparser
 except ImportError:
@@ -107,6 +107,9 @@ parser.add_argument(
     help="Number of epochs to train for",
 )
 parser.add_argument("--loginterval", type=int, default=100)
+# parser.add_argument(
+#     "--saveinterval", type=int, default=10, help="Save model every N epochs"
+# )
 parser.add_argument("--gpuids", nargs="+", type=int, default=[0], help="GPUs to use")
 parser.add_argument(
     "--exts",
@@ -413,13 +416,14 @@ for epoch in range(start_epoch, opt.epochs + 1):
                     net.state_dict(),
                     f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}.pth",
                 )
+                # time.sleep(2)
         except Exception as e:
             print(f"Encountered Exception: {e}")
 
     if not opt.nbupdates is None and nb_update_network > int(opt.nbupdates):
         break
 
-if epoch % 10 == 0:
+if epoch % 10 == 0 or epoch == opt.epochs:
     if local_rank == 0:
         torch.save(
             net.state_dict(), f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}.pth"
