@@ -405,16 +405,16 @@ if opt.pretrained and opt.net_path is not None:
 for epoch in range(start_epoch, opt.epochs + 1):
 
     _runnetwork(epoch, trainingdata)
+    if epoch % 10 == 0:
+        try:
+            if local_rank == 0:
 
-    try:
-        if local_rank == 0:
-
-            torch.save(
-                net.state_dict(),
-                f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}.pth",
-            )
-    except Exception as e:
-        print(f"Encountered Exception: {e}")
+                torch.save(
+                    net.state_dict(),
+                    f"{opt.outf}/net_{opt.namefile}_{str(epoch).zfill(2)}.pth",
+                )
+        except Exception as e:
+            print(f"Encountered Exception: {e}")
 
     if not opt.nbupdates is None and nb_update_network > int(opt.nbupdates):
         break
